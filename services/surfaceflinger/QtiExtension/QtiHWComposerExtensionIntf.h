@@ -81,6 +81,7 @@ public:
 private:
     android::impl::HWComposer& mQtiHWComposer;
     QtiComposerHalExtension* mQtiComposerHalExtn = nullptr;
+    uint32_t mQtiType{0}; // Cached layer type
 };
 
 } // namespace surfaceflingerextension
