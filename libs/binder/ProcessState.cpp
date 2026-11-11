@@ -449,8 +449,10 @@ void ProcessState::spawnPooledThread(bool isMain)
 }
 
 status_t ProcessState::setThreadPoolMaxThreadCount(size_t maxThreads) {
-    LOG_ALWAYS_FATAL_IF(mThreadPoolStarted && maxThreads < mMaxThreads,
-           "Binder threadpool cannot be shrunk after starting");
+    if (mThreadPoolStarted && maxThreads < mMaxThreads) {
+        ALOGE("Binder threadpool cannot be shrunk after starting. maxThreads:%zu mMaxThreads:%zu",
+              maxThreads, mMaxThreads.load());
+    }
     status_t result = NO_ERROR;
     if (ioctl(mDriverFD, BINDER_SET_MAX_THREADS, &maxThreads) != -1) {
         mMaxThreads = maxThreads;
