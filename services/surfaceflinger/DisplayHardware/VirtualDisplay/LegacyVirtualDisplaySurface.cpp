@@ -124,6 +124,12 @@ LegacyVirtualDisplaySurface::LegacyVirtualDisplaySurface(HWComposer& hwc,
 
     sink->setAsyncMode(true);
 
+    // A stalled virtual display consumer (e.g. WFD) must never block
+    // CompositionEngine::present() indefinitely: bound the wait for a sink
+    // buffer so the panel keeps presenting and only the virtual display
+    // drops the frame.
+    sink->setDequeueTimeout(10 * 1000 * 1000LL);  // 10 ms
+
     for (size_t i = 0; i < sizeof(mHwcBufferIds) / sizeof(mHwcBufferIds[0]); ++i) {
         mHwcBufferIds[i] = UINT64_MAX;
     }

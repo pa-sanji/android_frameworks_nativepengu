@@ -125,6 +125,7 @@
 #include <utils/Timers.h>
 #include <utils/misc.h>
 #include <algorithm>
+#include <android/api-level.h>
 #include <cerrno>
 #include <cinttypes>
 #include <cmath>
@@ -749,6 +750,27 @@ void SurfaceFlinger::enableHalVirtualDisplays(bool enable) {
     }
 }
 
+bool SurfaceFlinger::canAllocateHwcDisplayIdForVDS(uint64_t usage) {
+    // GRALLOC_USAGE_PRIVATE_WFD + GRALLOC_USAGE_HW_VIDEO_ENCODER = WFD using HW composer.
+    constexpr uint64_t kGrallocUsagePrivateWfd = 1ULL << 51;
+    constexpr uint64_t kGrallocUsageHwVideoEncoder = 0x00010000;
+    const bool isWfd =
+            (usage & kGrallocUsagePrivateWfd) && (usage & kGrallocUsageHwVideoEncoder);
+
+    // Enabling only the vendor property would allow WFD to use HWC.
+    // Enabling both the aosp and vendor properties would allow all other VDS to use HWC.
+    // Disabling both would set all virtual displays to fall back to GPU.
+    // In vendor frozen targets, allow WFD to use HWC without any property settings.
+    const bool canAllocate = mAllowHwcForVDS || (isWfd && mAllowHwcForWFD) ||
+            (isWfd && mFirstApiLevel < __ANDROID_API_T__);
+
+    if (canAllocate) {
+        enableHalVirtualDisplays(true);
+    }
+
+    return canAllocate;
+}
+
 std::optional<VirtualDisplayIdVariant> SurfaceFlinger::acquireVirtualDisplay(
         ui::Size resolution, ui::PixelFormat format, const std::string& uniqueId,
         compositionengine::DisplayCreationArgsBuilder& builder) {
@@ -1165,9 +1187,9 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
             &getCompositionEngine());
 // QTI_END: 2023-04-20: Display: sf: setCompositionEngine to qti extension at init.
 
-    if (base::GetBoolProperty("debug.sf.enable_hwc_vds"s, false)) {
-        enableHalVirtualDisplays(true);
-    }
+    mAllowHwcForWFD = base::GetBoolProperty("vendor.display.vds_allow_hwc"s, false);
+    mAllowHwcForVDS = mAllowHwcForWFD && base::GetBoolProperty("debug.sf.enable_hwc_vds"s, false);
+    mFirstApiLevel = android::base::GetIntProperty("ro.product.first_api_level", 0);
 
 // QTI_BEGIN: 2023-03-06: Display: SF: Squash commit of SF Extensions.
     mQtiSFExtnIntf->qtiStartUnifiedDraw();
@@ -4884,7 +4906,24 @@ void SurfaceFlinger::processDisplayAdded(const wp<IBinder>& displayToken,
         ALOGE_IF(status != NO_ERROR, "Unable to query format (%d)", status);
         pixelFormat = static_cast<ui::PixelFormat>(format);
 // QTI_BEGIN: 2023-01-24: Display: sf: Add support for multiple displays
-        qtiCanAllocateHwcForVDS = mQtiSFExtnIntf->qtiCanAllocateHwcDisplayIdForVDS(state);
+        // Allow WFD to use the composer HAL on vendor frozen targets, matching
+        // the AOSP/QTI virtual display property semantics. The QTI extension is
+        // kept as a fallback for configurations that still compute the decision
+        // there.
+        size_t maxVirtualDisplaySize = getHwComposer().getMaxVirtualDisplayDimension();
+        if (maxVirtualDisplaySize == 0 ||
+            ((uint64_t)resolution.width <= maxVirtualDisplaySize &&
+             (uint64_t)resolution.height <= maxVirtualDisplaySize)) {
+            uint64_t usage = 0;
+            status = surface->getConsumerUsage(&usage);
+            ALOGW_IF(status != NO_ERROR, "Unable to query usage (%d)", status);
+            if (status == NO_ERROR && canAllocateHwcDisplayIdForVDS(usage)) {
+                qtiCanAllocateHwcForVDS = true;
+            }
+        }
+        if (!qtiCanAllocateHwcForVDS) {
+            qtiCanAllocateHwcForVDS = mQtiSFExtnIntf->qtiCanAllocateHwcDisplayIdForVDS(state);
+        }
 // QTI_END: 2023-01-24: Display: sf: Add support for multiple displays
     } else {
         // Virtual displays without a surface are dormant:

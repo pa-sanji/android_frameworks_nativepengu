@@ -1297,6 +1297,10 @@ private:
     // Toggles use of HAL/GPU virtual displays.
     void enableHalVirtualDisplays(bool);
 
+    // Returns true when a virtual display with this consumer usage may be backed
+    // by the composer HAL, enabling it on demand for WFD on frozen targets.
+    bool canAllocateHwcDisplayIdForVDS(uint64_t usage);
+
     // Virtual display lifecycle for ID generation and HAL allocation.
     std::optional<VirtualDisplayIdVariant> acquireVirtualDisplay(
             ui::Size, ui::PixelFormat, const std::string& uniqueId,
@@ -1583,6 +1587,11 @@ private:
                 std::make_unique<DisplayIdGenerator<GpuVirtualDisplayId>>();
         std::unique_ptr<DisplayIdGenerator<HalVirtualDisplayId>> hal;
     } mVirtualDisplayIdGenerators;
+
+    // WFD/virtual display HWC configuration, read once in init().
+    bool mAllowHwcForWFD = false;
+    bool mAllowHwcForVDS = false;
+    int mFirstApiLevel = 0;
 
     std::atomic_uint mDebugFlashDelay = 0;
     std::atomic_bool mDebugDisableHWC = false;

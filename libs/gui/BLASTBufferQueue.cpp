@@ -640,7 +640,7 @@ status_t BLASTBufferQueue::acquireNextBufferLocked(
 
     auto buffer = bufferItem.mGraphicBuffer;
 
-    int32_t totalProcessed = 1 + static_cast<int32_t>(bufferItem.mCountOfDroppedBuffers);
+    int32_t totalProcessed = 1;
     if (mNumFrameAvailable >= totalProcessed) {
         mNumFrameAvailable -= totalProcessed;
     } else {
@@ -826,7 +826,7 @@ status_t BLASTBufferQueue::acquireAndReleaseBuffer() {
         return status;
     }
 
-    int32_t totalProcessed = 1 + static_cast<int32_t>(bufferItem.mCountOfDroppedBuffers);
+    int32_t totalProcessed = 1;
     if (mNumFrameAvailable >= totalProcessed) {
         mNumFrameAvailable -= totalProcessed;
     } else {
